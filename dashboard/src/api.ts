@@ -1,6 +1,9 @@
 import type { Patient, Claim, ClaimCreateRequest, EligibilityRequest, EligibilityResponse, HealthResponse } from './types';
 
-const BASE = '/api';
+const BASE = import.meta.env.VITE_API_URL || '/api';
+const HEALTH_URL = import.meta.env.VITE_API_URL
+  ? `${import.meta.env.VITE_API_URL.replace(/\/api$/, '')}/health`
+  : '/health';
 
 async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
@@ -32,5 +35,5 @@ export const api = {
       body: JSON.stringify(data),
     }),
 
-  getHealth: () => fetchJSON<HealthResponse>('/health'),
+  getHealth: () => fetchJSON<HealthResponse>(HEALTH_URL),
 };

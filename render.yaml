@@ -1,0 +1,99 @@
+services:
+  # ── API Gateway ──
+  - type: web
+    name: dentalflow-gateway
+    runtime: docker
+    dockerfilePath: ./gateway/Dockerfile
+    dockerContext: .
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: REDIS_URL
+        fromService:
+          name: dentalflow-redis
+          type: redis
+          property: connectionString
+      - key: PATIENT_SERVICE_URL
+        sync: false
+      - key: CLAIMS_SERVICE_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+
+  # ── Patient Service ──
+  - type: web
+    name: dentalflow-patient-service
+    runtime: docker
+    dockerfilePath: ./patient_service/Dockerfile
+    dockerContext: .
+    plan: free
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: dentalflow-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: dentalflow-redis
+          type: redis
+          property: connectionString
+
+  # ── Claims Service ──
+  - type: web
+    name: dentalflow-claims-service
+    runtime: docker
+    dockerfilePath: ./claims_service/Dockerfile
+    dockerContext: .
+    plan: free
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: dentalflow-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: dentalflow-redis
+          type: redis
+          property: connectionString
+
+  # ── Denial Worker ──
+  - type: worker
+    name: dentalflow-denial-worker
+    runtime: docker
+    dockerfilePath: ./denial_worker/Dockerfile
+    dockerContext: .
+    plan: free
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: dentalflow-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: dentalflow-redis
+          type: redis
+          property: connectionString
+
+  # ── Dashboard (Static Site) ──
+  - type: web
+    name: dentalflow-dashboard
+    runtime: static
+    buildCommand: cd dashboard && npm install && npm run build
+    staticPublishPath: dashboard/dist
+    envVars:
+      - key: VITE_API_URL
+        sync: false
+    headers:
+      - path: /*
+        name: Cache-Control
+        value: public, max-age=0, must-revalidate
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+
+databases:
+  - name: dentalflow-db
+    plan: free
+    databaseName: dentalflow
+    user: dentalflow

@@ -19,7 +19,10 @@ export function useSSE(onClaimUpdate: (event: ClaimUpdateEvent) => void): UseSSE
 
     function open() {
       if (cancelled) return;
-      es = new EventSource('/api/claims/stream');
+      const sseUrl = import.meta.env.VITE_API_URL
+        ? `${import.meta.env.VITE_API_URL}/claims/stream`
+        : '/api/claims/stream';
+      es = new EventSource(sseUrl);
 
       es.addEventListener('open', () => {
         setConnected(true);

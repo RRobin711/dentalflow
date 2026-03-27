@@ -12,7 +12,7 @@ Dental practices lose 15-30% of revenue to preventable claim denials — missing
 
 6 containers: React dashboard, API gateway, patient service, claims service, denial prediction worker, and shared PostgreSQL + Redis infrastructure. Claims flow synchronously through the gateway to the claims service, then asynchronously through Redis Streams to the ML-powered denial worker. Results push back to the dashboard in real time via Redis pub/sub and SSE.
 
-**[Live Demo](https://dentalflow-demo.example.com)**
+**[Live Demo](https://dentalflow-dashboard.onrender.com)** *(first load may take ~30s as free tier services wake up)*
 
 ## What It Demonstrates
 

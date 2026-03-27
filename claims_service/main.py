@@ -76,6 +76,45 @@ async def lifespan(app: FastAPI):
     app.state.pool = await asyncpg.create_pool(DATABASE_URL, min_size=2, max_size=10)
     app.state.redis = redis.from_url(REDIS_URL, decode_responses=True, socket_timeout=5, socket_connect_timeout=5)
 
+    # Ensure tables exist (for Render managed PG which doesn't run init_db.sql)
+    async with app.state.pool.acquire() as conn:
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS patients (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                name VARCHAR(200) NOT NULL,
+                date_of_birth DATE NOT NULL,
+                insurance_provider VARCHAR(100) NOT NULL,
+                insurance_id VARCHAR(100) NOT NULL,
+                plan_type VARCHAR(10) NOT NULL CHECK (plan_type IN ('PPO', 'HMO', 'DHMO')),
+                annual_maximum_cents INT NOT NULL DEFAULT 150000,
+                annual_used_cents INT NOT NULL DEFAULT 0,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            );
+            CREATE TABLE IF NOT EXISTS claims (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                idempotency_key VARCHAR(255) UNIQUE NOT NULL,
+                patient_id UUID NOT NULL REFERENCES patients(id),
+                cdt_code VARCHAR(10) NOT NULL,
+                cdt_description VARCHAR(200),
+                procedure_date DATE NOT NULL,
+                tooth_number INT,
+                charged_amount_cents INT NOT NULL,
+                has_xray BOOLEAN NOT NULL DEFAULT false,
+                has_narrative BOOLEAN NOT NULL DEFAULT false,
+                has_perio_chart BOOLEAN NOT NULL DEFAULT false,
+                status VARCHAR(30) NOT NULL DEFAULT 'created'
+                    CHECK (status IN ('created','queued','scoring','scored','submitted','accepted','denied','error')),
+                denial_risk_score FLOAT,
+                denial_risk_factors JSONB,
+                scored_at TIMESTAMPTZ,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            );
+            CREATE INDEX IF NOT EXISTS idx_claims_status ON claims(status);
+            CREATE INDEX IF NOT EXISTS idx_claims_patient_id ON claims(patient_id);
+            CREATE INDEX IF NOT EXISTS idx_claims_idempotency_key ON claims(idempotency_key);
+        """)
+
     # Create consumer group (ignore if already exists)
     try:
         await app.state.redis.xgroup_create(STREAM_NAME, CONSUMER_GROUP, id="0", mkstream=True)

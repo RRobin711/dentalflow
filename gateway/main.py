@@ -21,6 +21,7 @@ CLAIMS_SERVICE_URL = os.environ.get("CLAIMS_SERVICE_URL", "http://localhost:8002
 
 RATE_LIMIT = 100  # requests per minute
 FORWARD_HEADERS = {"content-type", "x-correlation-id"}
+CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "http://localhost:3000,http://localhost:5173").split(",")
 
 
 # ── App lifecycle ──────────────────────────────────────────────────────────
@@ -38,7 +39,7 @@ app = FastAPI(title="DentalFlow API Gateway", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

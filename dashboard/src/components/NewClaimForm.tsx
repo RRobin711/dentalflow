@@ -82,7 +82,10 @@ export function NewClaimForm({ onSubmitted }: NewClaimFormProps) {
   // Listen for SSE updates on the submitted claim
   useEffect(() => {
     if (!result) return;
-    const es = new EventSource('/api/claims/stream');
+    const sseUrl = import.meta.env.VITE_API_URL
+      ? `${import.meta.env.VITE_API_URL}/claims/stream`
+      : '/api/claims/stream';
+    const es = new EventSource(sseUrl);
     sseRef.current = es;
     es.addEventListener('claim_update', (e: MessageEvent) => {
       try {

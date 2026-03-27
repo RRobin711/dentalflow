@@ -92,6 +92,7 @@ services:
       REDIS_URL: redis://redis:6379
       PATIENT_SERVICE_URL: http://patient-service:8001
       CLAIMS_SERVICE_URL: http://claims-service:8002
+      CORS_ORIGINS: http://localhost:3000,http://localhost:5173
     depends_on:
       patient-service:
         condition: service_healthy
