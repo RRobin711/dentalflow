@@ -1,0 +1,119 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 520" font-family="system-ui, -apple-system, sans-serif" font-size="13">
+  <defs>
+    <marker id="arrow" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6" fill="#475569"/>
+    </marker>
+    <marker id="arrow-teal" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6" fill="#0f766e"/>
+    </marker>
+    <marker id="arrow-amber" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6" fill="#d97706"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="920" height="520" fill="white" rx="8"/>
+
+  <!-- Title -->
+  <text x="460" y="32" text-anchor="middle" font-weight="700" font-size="16" fill="#1e293b">DentalFlow Architecture</text>
+
+  <!-- Dashboard -->
+  <rect x="40" y="60" width="140" height="64" rx="8" fill="#f0fdfa" stroke="#0f766e" stroke-width="2"/>
+  <text x="110" y="85" text-anchor="middle" font-weight="600" fill="#0f766e">Dashboard</text>
+  <text x="110" y="103" text-anchor="middle" font-size="11" fill="#64748b">React + nginx :3000</text>
+
+  <!-- Gateway -->
+  <rect x="280" y="60" width="160" height="64" rx="8" fill="#f0fdfa" stroke="#0f766e" stroke-width="2"/>
+  <text x="360" y="85" text-anchor="middle" font-weight="600" fill="#0f766e">API Gateway</text>
+  <text x="360" y="103" text-anchor="middle" font-size="11" fill="#64748b">FastAPI :8000</text>
+
+  <!-- Patient Service -->
+  <rect x="540" y="60" width="160" height="64" rx="8" fill="#f0fdfa" stroke="#0f766e" stroke-width="2"/>
+  <text x="620" y="85" text-anchor="middle" font-weight="600" fill="#0f766e">Patient Service</text>
+  <text x="620" y="103" text-anchor="middle" font-size="11" fill="#64748b">FastAPI :8001</text>
+
+  <!-- Claims Service -->
+  <rect x="540" y="170" width="160" height="64" rx="8" fill="#f0fdfa" stroke="#0f766e" stroke-width="2"/>
+  <text x="620" y="195" text-anchor="middle" font-weight="600" fill="#0f766e">Claims Service</text>
+  <text x="620" y="213" text-anchor="middle" font-size="11" fill="#64748b">FastAPI :8002</text>
+
+  <!-- Denial Worker -->
+  <rect x="540" y="340" width="160" height="64" rx="8" fill="#f0fdfa" stroke="#0f766e" stroke-width="2"/>
+  <text x="620" y="365" text-anchor="middle" font-weight="600" fill="#0f766e">Denial Worker</text>
+  <text x="620" y="383" text-anchor="middle" font-size="11" fill="#64748b">ML Scoring</text>
+
+  <!-- Redis -->
+  <rect x="320" y="260" width="120" height="60" rx="30" fill="#fef3c7" stroke="#d97706" stroke-width="2"/>
+  <text x="380" y="285" text-anchor="middle" font-weight="600" fill="#92400e">Redis 7</text>
+  <text x="380" y="302" text-anchor="middle" font-size="10" fill="#92400e">Streams + pub/sub</text>
+
+  <!-- PostgreSQL -->
+  <rect x="770" y="170" width="120" height="60" rx="8" fill="#f1f5f9" stroke="#475569" stroke-width="2"/>
+  <text x="830" y="195" text-anchor="middle" font-weight="600" fill="#334155">PostgreSQL 16</text>
+  <text x="830" y="212" text-anchor="middle" font-size="10" fill="#64748b">Claims + Patients</text>
+
+  <!-- Redis cache box -->
+  <rect x="770" y="60" width="120" height="60" rx="8" fill="#fef3c7" stroke="#d97706" stroke-width="2"/>
+  <text x="830" y="85" text-anchor="middle" font-weight="600" fill="#92400e">Redis Cache</text>
+  <text x="830" y="102" text-anchor="middle" font-size="10" fill="#92400e">15-min TTL</text>
+
+  <!-- Sync arrows: Dashboard → Gateway -->
+  <line x1="180" y1="92" x2="275" y2="92" stroke="#0f766e" stroke-width="2" marker-end="url(#arrow-teal)"/>
+
+  <!-- Gateway → Patient Service -->
+  <line x1="440" y1="82" x2="535" y2="82" stroke="#0f766e" stroke-width="2" marker-end="url(#arrow-teal)"/>
+
+  <!-- Gateway → Claims Service -->
+  <line x1="440" y1="105" x2="480" y2="105" stroke="#0f766e" stroke-width="2"/>
+  <line x1="480" y1="105" x2="480" y2="195" stroke="#0f766e" stroke-width="2"/>
+  <line x1="480" y1="195" x2="535" y2="195" stroke="#0f766e" stroke-width="2" marker-end="url(#arrow-teal)"/>
+
+  <!-- Patient Service → Redis Cache (cache-aside) -->
+  <line x1="700" y1="85" x2="765" y2="85" stroke="#d97706" stroke-width="1.5" stroke-dasharray="6,3" marker-end="url(#arrow-amber)"/>
+  <text x="733" y="76" text-anchor="middle" font-size="9" fill="#d97706" font-weight="500">cache-aside</text>
+
+  <!-- Claims Service → Redis Streams (async) -->
+  <line x1="540" y1="215" x2="380" y2="258" stroke="#d97706" stroke-width="2" stroke-dasharray="6,3" marker-end="url(#arrow-amber)"/>
+  <text x="440" y="242" text-anchor="middle" font-size="9" fill="#d97706" font-weight="500">XADD</text>
+
+  <!-- Redis Streams → Denial Worker -->
+  <line x1="420" y1="310" x2="537" y2="358" stroke="#d97706" stroke-width="2" stroke-dasharray="6,3" marker-end="url(#arrow-amber)"/>
+  <text x="500" y="325" text-anchor="middle" font-size="9" fill="#d97706" font-weight="500">XREADGROUP / XACK</text>
+
+  <!-- Denial Worker → PostgreSQL -->
+  <line x1="700" y1="365" x2="830" y2="235" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Claims Service → PostgreSQL -->
+  <line x1="700" y1="200" x2="765" y2="200" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Patient Service → PostgreSQL -->
+  <line x1="700" y1="100" x2="830" y2="168" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Denial Worker → Redis pub/sub → Gateway SSE → Dashboard -->
+  <line x1="540" y1="385" x2="380" y2="385" stroke="#d97706" stroke-width="2" stroke-dasharray="6,3"/>
+  <line x1="380" y1="385" x2="380" y2="435" stroke="#d97706" stroke-width="2" stroke-dasharray="6,3"/>
+  <text x="455" y="400" text-anchor="middle" font-size="9" fill="#d97706" font-weight="500">pub/sub</text>
+
+  <!-- Real-time flow back to gateway -->
+  <line x1="380" y1="435" x2="300" y2="435" stroke="#0f766e" stroke-width="2"/>
+  <line x1="300" y1="435" x2="300" y2="128" stroke="#0f766e" stroke-width="2"/>
+  <line x1="300" y1="128" x2="360" y2="128" stroke="#0f766e" stroke-width="1.5"/>
+  <text x="265" y="285" text-anchor="middle" font-size="9" fill="#0f766e" font-weight="500" transform="rotate(-90, 265, 285)">SSE stream</text>
+
+  <!-- Gateway SSE → Dashboard -->
+  <line x1="280" y1="105" x2="183" y2="105" stroke="#0f766e" stroke-width="2" marker-end="url(#arrow-teal)"/>
+  <text x="230" y="118" text-anchor="middle" font-size="9" fill="#0f766e" font-weight="500">SSE</text>
+
+  <!-- Legend -->
+  <rect x="40" y="460" width="840" height="45" rx="6" fill="#f8fafc" stroke="#e2e8f0"/>
+  <line x1="60" y1="483" x2="100" y2="483" stroke="#0f766e" stroke-width="2"/>
+  <text x="108" y="487" font-size="11" fill="#475569">Sync (HTTP)</text>
+  <line x1="200" y1="483" x2="240" y2="483" stroke="#d97706" stroke-width="2" stroke-dasharray="6,3"/>
+  <text x="248" y="487" font-size="11" fill="#475569">Async (Redis)</text>
+  <rect x="360" y="474" width="16" height="16" rx="4" fill="#f0fdfa" stroke="#0f766e" stroke-width="1.5"/>
+  <text x="384" y="487" font-size="11" fill="#475569">Service</text>
+  <rect x="460" y="474" width="16" height="16" rx="8" fill="#fef3c7" stroke="#d97706" stroke-width="1.5"/>
+  <text x="484" y="487" font-size="11" fill="#475569">Redis</text>
+  <rect x="540" y="474" width="16" height="16" rx="4" fill="#f1f5f9" stroke="#475569" stroke-width="1.5"/>
+  <text x="564" y="487" font-size="11" fill="#475569">PostgreSQL</text>
+</svg>
