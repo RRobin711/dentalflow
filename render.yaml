@@ -9,10 +9,7 @@ services:
     healthCheckPath: /health
     envVars:
       - key: REDIS_URL
-        fromService:
-          name: dentalflow-redis
-          type: redis
-          property: connectionString
+        sync: false
       - key: PATIENT_SERVICE_URL
         sync: false
       - key: CLAIMS_SERVICE_URL
@@ -33,10 +30,7 @@ services:
           name: dentalflow-db
           property: connectionString
       - key: REDIS_URL
-        fromService:
-          name: dentalflow-redis
-          type: redis
-          property: connectionString
+        sync: false
 
   # ── Claims Service ──
   - type: web
@@ -51,10 +45,7 @@ services:
           name: dentalflow-db
           property: connectionString
       - key: REDIS_URL
-        fromService:
-          name: dentalflow-redis
-          type: redis
-          property: connectionString
+        sync: false
 
   # ── Denial Worker ──
   - type: worker
@@ -69,10 +60,7 @@ services:
           name: dentalflow-db
           property: connectionString
       - key: REDIS_URL
-        fromService:
-          name: dentalflow-redis
-          type: redis
-          property: connectionString
+        sync: false
 
   # ── Dashboard (Static Site) ──
   - type: web
