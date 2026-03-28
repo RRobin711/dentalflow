@@ -47,13 +47,14 @@ services:
       - key: REDIS_URL
         sync: false
 
-  # ── Denial Worker ──
-  - type: worker
+  # ── Denial Worker (web service wrapping a background consumer) ──
+  - type: web
     name: dentalflow-denial-worker
     runtime: docker
     dockerfilePath: ./denial_worker/Dockerfile
     dockerContext: .
     plan: free
+    healthCheckPath: /health
     envVars:
       - key: DATABASE_URL
         fromDatabase:

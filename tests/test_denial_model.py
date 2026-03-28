@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 import pytest
 
 # Stub out heavy dependencies and env vars so we can import just the model classes
-for mod in ("asyncpg", "redis", "redis.asyncio"):
+for mod in ("asyncpg", "redis", "redis.asyncio", "uvicorn", "fastapi"):
     if mod not in sys.modules:
         sys.modules[mod] = MagicMock()
 os.environ.setdefault("DATABASE_URL", "postgresql://stub:stub@localhost/stub")

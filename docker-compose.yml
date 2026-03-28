@@ -72,6 +72,8 @@ services:
     build:
       context: .
       dockerfile: denial_worker/Dockerfile
+    ports:
+      - "8003:8003"
     environment:
       DATABASE_URL: postgresql://dentalflow:dentalflow@postgres:5432/dentalflow
       REDIS_URL: redis://redis:6379
@@ -81,6 +83,11 @@ services:
       redis:
         condition: service_healthy
     restart: on-failure
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
   gateway:
     build:

@@ -5,12 +5,15 @@ import json
 import logging
 import os
 import signal
+import threading
 import time
 from pathlib import Path
 from uuid import UUID
 
 import asyncpg
 import redis.asyncio as aioredis
+import uvicorn
+from fastapi import FastAPI
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("denial-worker")
@@ -22,6 +25,19 @@ STREAM_NAME = "claims:pending"
 CONSUMER_GROUP = "denial_workers"
 CONSUMER_NAME = f"worker-{os.getpid()}"
 PUBSUB_CHANNEL = "claim_updates"
+
+
+# ── Health endpoint (so Render treats this as a healthy web service) ───────
+
+health_app = FastAPI()
+
+@health_app.get("/health")
+async def health():
+    return {"status": "healthy", "service": "denial-worker"}
+
+def _run_health_server():
+    port = int(os.environ.get("PORT", "8003"))
+    uvicorn.run(health_app, host="0.0.0.0", port=port, log_level="warning")
 
 
 # ── Denial Risk Model ─────────────────────────────────────────────────────
@@ -383,6 +399,9 @@ class Worker:
 # ── Entrypoint ─────────────────────────────────────────────────────────────
 
 async def main():
+    health_thread = threading.Thread(target=_run_health_server, daemon=True)
+    health_thread.start()
+
     worker = Worker()
 
     loop = asyncio.get_event_loop()
