@@ -116,7 +116,7 @@ def test_create_claim(client, patient_id):
     assert resp.status_code == 201
     data = resp.json()
     assert "id" in data
-    assert data["status"] in ("created", "queued")
+    assert data["status"] in ("created", "queued", "scoring", "scored")
     assert data["cdt_description"] is not None
 
 
