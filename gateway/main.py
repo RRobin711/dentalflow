@@ -23,14 +23,26 @@ RATE_LIMIT = 100  # requests per minute
 FORWARD_HEADERS = {"content-type", "x-correlation-id"}
 CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "http://localhost:3000,http://localhost:5173").split(",")
 
-# Lua script for atomic rate limiting: INCR + EXPIRE in one round trip.
-# Returns the current count. Sets TTL only on first increment (new key).
+# Sliding window rate limiter using sorted sets.
+# Each request adds a timestamped entry. Entries outside the window are pruned.
+# Returns 1 if rate limit exceeded, 0 if allowed.
 _RATE_LIMIT_LUA = """
-local current = redis.call('INCR', KEYS[1])
-if current == 1 then
-    redis.call('EXPIRE', KEYS[1], ARGV[1])
+local key = KEYS[1]
+local window = tonumber(ARGV[1])
+local limit = tonumber(ARGV[2])
+local now = tonumber(ARGV[3])
+local member = ARGV[4]
+
+redis.call('ZREMRANGEBYSCORE', key, 0, now - window)
+local count = redis.call('ZCARD', key)
+
+if count < limit then
+    redis.call('ZADD', key, now, member)
+    redis.call('EXPIRE', key, window)
+    return 0
+else
+    return 1
 end
-return current
 """
 
 
@@ -39,10 +51,18 @@ return current
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     app.state.http_client = httpx.AsyncClient(timeout=30.0)
-    app.state.redis = aioredis.from_url(REDIS_URL, decode_responses=True, socket_timeout=5, socket_connect_timeout=5)
-    app.state.rate_limit_script = app.state.redis.register_script(_RATE_LIMIT_LUA)
+    # Fast connection for rate limiting — 200ms max. If Redis is slow, fail open immediately.
+    app.state.redis_ratelimit = aioredis.from_url(
+        REDIS_URL, decode_responses=True, socket_timeout=0.2, socket_connect_timeout=0.2
+    )
+    app.state.rate_limit_script = app.state.redis_ratelimit.register_script(_RATE_LIMIT_LUA)
+    # Normal connection for SSE pub/sub and health checks — needs longer timeout for blocking reads.
+    app.state.redis = aioredis.from_url(
+        REDIS_URL, decode_responses=True, socket_timeout=5, socket_connect_timeout=5
+    )
     yield
     await app.state.http_client.aclose()
+    await app.state.redis_ratelimit.aclose()
     await app.state.redis.aclose()
 
 
@@ -78,14 +98,19 @@ async def rate_limit_middleware(request: Request, call_next):
     key = f"ratelimit:{client_ip}"
 
     try:
-        current = await app.state.rate_limit_script(keys=[key], args=[60])
-        if current > RATE_LIMIT:
+        import time as _time
+        now = _time.time()
+        member_id = f"{now}:{client_ip}:{uuid.uuid4().hex[:8]}"
+        exceeded = await app.state.rate_limit_script(
+            keys=[key], args=[60, RATE_LIMIT, now, member_id]
+        )
+        if exceeded:
             return JSONResponse(
                 status_code=429,
                 content={"detail": "Rate limit exceeded. Try again in 60 seconds."},
             )
     except Exception:
-        # Fail open — allow request if Redis is down
+        # Fail open — allow request if Redis is down or slow
         pass
 
     return await call_next(request)

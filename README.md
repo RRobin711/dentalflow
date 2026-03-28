@@ -4,7 +4,7 @@ Async dental claims processing pipeline with ML-based denial prediction.
 
 ## Problem
 
-Dental practices lose 15-30% of revenue to preventable claim denials — missing X-rays, wrong CDT codes, exceeded annual maximums. Small independent practices (1-3 staff) can't afford enterprise RCM software. DentalFlow catches denial risks before submission using an ML model that explains exactly what to fix.
+Dental practices lose 15-30% of revenue to preventable claim denials — missing X-rays, wrong CDT codes, exceeded annual maximums. Small independent practices (1-3 staff) can't afford enterprise RCM software. DentalFlow scores denial risk before submission using an ML model trained on synthetic dental claims data. The model explains exactly which factors drive each prediction — missing X-rays, plan type, annual max exhaustion — so the billing coordinator knows what to fix.
 
 ## Live Demo
 
@@ -22,7 +22,7 @@ A claim enters through the API gateway, which routes it to the claims service fo
 
 | Concept | Implementation | Location |
 |---------|---------------|----------|
-| Microservices | 6 independently deployable containers | `docker-compose.yml` |
+| Microservices | 6 containerized services | `docker-compose.yml` |
 | API Gateway | Request routing, rate limiting (sliding window), correlation IDs | `gateway/main.py` |
 | Cache-aside | Redis eligibility cache, 15-min TTL, key = `elig:{patient_id}:{provider}:{cdt}` | `patient_service/main.py` |
 | Message queue | Redis Streams with consumer groups, XREADGROUP/XACK | `denial_worker/main.py` |
@@ -130,7 +130,7 @@ This is a working demo, not production software. Here's what I'd change for a re
 
 **Schema Migrations** -- Tables are created via inline `CREATE TABLE IF NOT EXISTS` in service startup. Production would use Alembic (or a similar migration tool) with versioned migration files, so schema changes are trackable, reversible, and coordinated across deployments.
 
-**Rate Limiter** -- Uses an atomic Lua script to avoid the INCR/EXPIRE race condition common in naive implementations. For multi-gateway deployments, I'd add sliding window counters or token bucket algorithms with configurable per-route limits.
+**Rate Limiter** -- Uses a sliding window log (sorted sets) for accurate rate limiting without the boundary problem of fixed window counters. For multi-gateway deployments, I'd add configurable per-route limits and token bucket algorithms for burst handling.
 
 **Transactional Outbox** -- The claims service does INSERT then XADD as two separate operations. If XADD fails, a recovery loop polls for stuck claims every 30 seconds. This works at demo scale but polling doesn't scale. Production would use the transactional outbox pattern: write the event to an `outbox` table in the same transaction as the claim INSERT, then a separate process tails the outbox and publishes to the stream. Guarantees exactly-once publishing without polling.
 

@@ -23,7 +23,7 @@ REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379")
 
 STREAM_NAME = "claims:pending"
 CONSUMER_GROUP = "denial_workers"
-CONSUMER_NAME = f"worker-{os.getpid()}"
+CONSUMER_NAME = os.environ.get("CONSUMER_NAME", "worker-1")
 PUBSUB_CHANNEL = "claim_updates"
 
 
@@ -260,8 +260,11 @@ class Worker:
         logger.info("Worker started. Recovering pending messages...")
         await self._process_pending()
 
-        logger.info("Processing new messages...")
-        await self._process_new()
+        logger.info("Starting consumer loop and dead-consumer recovery...")
+        await asyncio.gather(
+            self._process_new(),
+            self._autoclaim_loop(),
+        )
 
     async def _process_pending(self):
         """Recover unacknowledged messages from previous runs."""
@@ -295,6 +298,37 @@ class Worker:
             except Exception as e:
                 logger.error(f"Error in consumer loop: {e}")
                 await asyncio.sleep(1)
+
+    async def _autoclaim_loop(self):
+        """Reclaim orphaned messages from dead consumers via XAUTOCLAIM.
+
+        Scans the PEL for messages idle longer than 60 seconds across ALL
+        consumers in the group. If a different worker instance crashed and
+        its consumer name no longer exists, this picks up its abandoned messages.
+        """
+        while self.running:
+            try:
+                result = await self.redis.xautoclaim(
+                    STREAM_NAME, CONSUMER_GROUP, CONSUMER_NAME,
+                    min_idle_time=60000,  # 60 seconds
+                    start_id="0-0",
+                    count=10,
+                )
+                # result: (next_start_id, claimed_messages, deleted_ids)
+                if result and result[1]:
+                    for msg_id, data in result[1]:
+                        logger.info(f"Autoclaimed orphaned message {msg_id}")
+                        await self._handle_message(msg_id, data)
+            except aioredis.ResponseError as e:
+                if "unknown command" in str(e).lower():
+                    logger.warning("XAUTOCLAIM not supported (requires Redis 6.2+), skipping")
+                    return
+                logger.error(f"Autoclaim error: {e}")
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.error(f"Autoclaim loop error: {e}")
+            await asyncio.sleep(30)
 
     async def _handle_message(self, msg_id: str, data: dict):
         claim_id = data.get("claim_id")

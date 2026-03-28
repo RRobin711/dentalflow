@@ -33,7 +33,7 @@ I built DentalFlow in 3 days using [Claude Code](https://docs.anthropic.com/en/d
 
 | Feedback Note | Implementation | File |
 |---|---|---|
-| Microservices (3, all have its own services) | 4 independently deployable services + infrastructure | `docker-compose.yml` |
+| Microservices (3, all have its own services) | 4 containerized services + infrastructure | `docker-compose.yml` |
 | Application Gateway (Routing layer) | Request routing, rate limiting, correlation IDs | `gateway/main.py` |
 | Redis (Caching Classes) — Session | Cache-aside eligibility with 15-min TTL | `patient_service/main.py` |
 | Multistep data persistence / Avoid Residual Data | Idempotency keys + ordered status transitions + recovery loop | `claims_service/main.py` |
