@@ -120,6 +120,24 @@ make build        # Services must be running
 make test         # pytest tests/ -v
 ```
 
+## Production Considerations
+
+This is a working demo, not production software. Here's what I'd change for a real deployment:
+
+**Authentication & Authorization** -- The gateway has a placeholder auth middleware that accepts demo traffic. Production would use JWT tokens issued by an identity provider (Auth0, Cognito), validated at the gateway, with per-service role scopes (front desk can submit claims, only managers can override denial recommendations). HIPAA compliance would require audit logging of every access.
+
+**Database per Service** -- All services currently share one PostgreSQL instance. This couples them at the data layer, which defeats independent deployability. Production would give each service its own database (or at minimum its own schema), with cross-service communication happening through APIs or events, not shared tables. The patient service would own the `patients` table exclusively, and the claims service would maintain its own denormalized patient reference.
+
+**Schema Migrations** -- Tables are created via inline `CREATE TABLE IF NOT EXISTS` in service startup. Production would use Alembic (or a similar migration tool) with versioned migration files, so schema changes are trackable, reversible, and coordinated across deployments.
+
+**Rate Limiter** -- Uses an atomic Lua script to avoid the INCR/EXPIRE race condition common in naive implementations. For multi-gateway deployments, I'd add sliding window counters or token bucket algorithms with configurable per-route limits.
+
+**Transactional Outbox** -- The claims service does INSERT then XADD as two separate operations. If XADD fails, a recovery loop polls for stuck claims every 30 seconds. This works at demo scale but polling doesn't scale. Production would use the transactional outbox pattern: write the event to an `outbox` table in the same transaction as the claim INSERT, then a separate process tails the outbox and publishes to the stream. Guarantees exactly-once publishing without polling.
+
+**Observability** -- Services log with correlation IDs, but production would add structured JSON logging, distributed tracing (OpenTelemetry), metrics (Prometheus), and alerting on error rates, queue depth, and scoring latency.
+
+**ML Model Management** -- The model is a static `.joblib` file baked into the Docker image. Production would use a model registry (MLflow, SageMaker), versioned deployments, A/B testing between model versions, and monitoring for data drift and prediction quality degradation.
+
 ## Project Context
 
 Built as a portfolio project demonstrating distributed systems patterns and as a prototype for a dental RCM startup targeting small independent practices. The ML model is trained on synthetic data -- a production version would use real claims data with proper HIPAA compliance and would replace the simulated eligibility checks with actual insurance API integrations.

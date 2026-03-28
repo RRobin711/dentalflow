@@ -4,14 +4,16 @@ import asyncio
 import json
 import logging
 import os
+import uuid
 from contextlib import asynccontextmanager
 from uuid import UUID
 
 import asyncpg
 import redis.asyncio as redis
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(message)s")
 logger = logging.getLogger("claims-service")
 
 from shared.models import ClaimCreate, ClaimResponse, HealthResponse
@@ -175,6 +177,16 @@ async def _recovery_loop(app: FastAPI):
 app = FastAPI(title="Claims Service", lifespan=lifespan)
 
 
+@app.middleware("http")
+async def correlation_id_middleware(request: Request, call_next):
+    corr_id = request.headers.get("X-Correlation-ID", str(uuid.uuid4()))
+    request.state.correlation_id = corr_id
+    logger.info("%s %s [corr_id=%s]", request.method, request.url.path, corr_id)
+    response = await call_next(request)
+    response.headers["X-Correlation-ID"] = corr_id
+    return response
+
+
 # ── Routes ─────────────────────────────────────────────────────────────────
 
 @app.get("/health")
@@ -241,6 +253,7 @@ async def create_claim(claim: ClaimCreate):
 
     # Publish to Redis Streams
     claim_id = str(row["id"])
+    logger.info("Claim %s created [idem_key=%s]", claim_id, claim.idempotency_key)
     try:
         await app.state.redis.xadd(
             STREAM_NAME,
@@ -260,9 +273,13 @@ async def create_claim(claim: ClaimCreate):
             row["id"],
         )
         row = await app.state.pool.fetchrow("SELECT * FROM claims WHERE id = $1", row["id"])
-    except Exception:
-        # Graceful degradation: claim exists in PG with status='created'
-        pass
+    except Exception as e:
+        # Graceful degradation: claim persisted in PG with status='created'.
+        # Recovery loop (every 30s) will republish to Redis Streams.
+        logger.warning(
+            "Redis XADD failed for claim %s — recovery loop will retry: %s",
+            claim_id, e,
+        )
 
     return _row_to_claim(row)
 

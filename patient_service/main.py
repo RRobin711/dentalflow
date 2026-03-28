@@ -1,13 +1,19 @@
 """Patient Service — eligibility checks with cache-aside pattern."""
 
 import json
+import logging
 import os
+import uuid
 from contextlib import asynccontextmanager
 from datetime import date
 from uuid import UUID
 
 import asyncpg
 import redis.asyncio as redis
+from fastapi import Request
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(message)s")
+logger = logging.getLogger("patient-service")
 from fastapi import FastAPI, HTTPException
 
 from shared.models import (
@@ -166,6 +172,16 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Patient Service", lifespan=lifespan)
 
 
+@app.middleware("http")
+async def correlation_id_middleware(request: Request, call_next):
+    corr_id = request.headers.get("X-Correlation-ID", str(uuid.uuid4()))
+    request.state.correlation_id = corr_id
+    logger.info("%s %s [corr_id=%s]", request.method, request.url.path, corr_id)
+    response = await call_next(request)
+    response.headers["X-Correlation-ID"] = corr_id
+    return response
+
+
 # ── Routes ─────────────────────────────────────────────────────────────────
 
 @app.get("/health")
@@ -203,11 +219,15 @@ async def check_eligibility(req: EligibilityCheckRequest):
     if cached:
         result = json.loads(cached)
         result["cache_hit"] = True
+        logger.info("Eligibility check for patient %s, CDT %s — cache hit",
+                    req.patient_id, req.cdt_code)
         # Log audit
         await _log_eligibility(patient, req.cdt_code, result, cache_hit=True)
         return result
 
     # Cache miss — simulate insurer API
+    logger.info("Eligibility check for patient %s, CDT %s — cache miss",
+                req.patient_id, req.cdt_code)
     estimated_cost = TYPICAL_COSTS.get(req.cdt_code[:2].upper(), 10000)
     result = _simulate_eligibility(patient, req.cdt_code, estimated_cost)
     result["cache_hit"] = False

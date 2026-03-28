@@ -1,4 +1,4 @@
-.PHONY: up down build demo test logs health clean train help
+.PHONY: up down build demo test test-unit logs health clean train help
 
 up:             ## Start all services
 	docker compose up -d
@@ -14,6 +14,9 @@ demo:           ## Run the end-to-end demo script
 
 test:           ## Run all tests (services must be running)
 	pytest tests/ -v
+
+test-unit:      ## Run unit tests only (no Docker needed)
+	pytest tests/test_denial_model.py tests/test_unit_services.py -v
 
 logs:           ## Tail logs from all services
 	docker compose logs -f --tail=50

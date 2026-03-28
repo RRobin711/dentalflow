@@ -23,6 +23,16 @@ RATE_LIMIT = 100  # requests per minute
 FORWARD_HEADERS = {"content-type", "x-correlation-id"}
 CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "http://localhost:3000,http://localhost:5173").split(",")
 
+# Lua script for atomic rate limiting: INCR + EXPIRE in one round trip.
+# Returns the current count. Sets TTL only on first increment (new key).
+_RATE_LIMIT_LUA = """
+local current = redis.call('INCR', KEYS[1])
+if current == 1 then
+    redis.call('EXPIRE', KEYS[1], ARGV[1])
+end
+return current
+"""
+
 
 # ── App lifecycle ──────────────────────────────────────────────────────────
 
@@ -30,6 +40,7 @@ CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "http://localhost:3000,http://loca
 async def lifespan(app: FastAPI):
     app.state.http_client = httpx.AsyncClient(timeout=30.0)
     app.state.redis = aioredis.from_url(REDIS_URL, decode_responses=True, socket_timeout=5, socket_connect_timeout=5)
+    app.state.rate_limit_script = app.state.redis.register_script(_RATE_LIMIT_LUA)
     yield
     await app.state.http_client.aclose()
     await app.state.redis.aclose()
@@ -67,10 +78,7 @@ async def rate_limit_middleware(request: Request, call_next):
     key = f"ratelimit:{client_ip}"
 
     try:
-        r: aioredis.Redis = app.state.redis
-        current = await r.incr(key)
-        if current == 1:
-            await r.expire(key, 60)
+        current = await app.state.rate_limit_script(keys=[key], args=[60])
         if current > RATE_LIMIT:
             return JSONResponse(
                 status_code=429,
@@ -81,6 +89,26 @@ async def rate_limit_middleware(request: Request, call_next):
         pass
 
     return await call_next(request)
+
+
+@app.middleware("http")
+async def auth_middleware(request: Request, call_next):
+    # Skip auth for health checks and SSE stream
+    if request.url.path in ("/health", "/api/claims/stream"):
+        return await call_next(request)
+
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        # In production: validate JWT, extract user/roles, enforce scopes.
+        # For this demo, any Bearer token is accepted.
+        request.state.user = "authenticated"
+    else:
+        # Demo mode: allow unauthenticated access with a demo user context.
+        # Production would return 401 here.
+        request.state.user = "demo_user"
+
+    response = await call_next(request)
+    return response
 
 
 # ── Health ─────────────────────────────────────────────────────────────────
