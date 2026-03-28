@@ -76,46 +76,10 @@ CDT_CODES: dict[str, str] = {
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     app.state.pool = await asyncpg.create_pool(DATABASE_URL, min_size=2, max_size=10)
-    app.state.redis = redis.from_url(REDIS_URL, decode_responses=True, socket_timeout=5, socket_connect_timeout=5)
+    app.state.redis = redis.from_url(REDIS_URL, decode_responses=True, socket_timeout=0.2, socket_connect_timeout=0.2)
 
-    # Ensure tables exist (for Render managed PG which doesn't run init_db.sql)
-    async with app.state.pool.acquire() as conn:
-        await conn.execute("""
-            CREATE TABLE IF NOT EXISTS patients (
-                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                name VARCHAR(200) NOT NULL,
-                date_of_birth DATE NOT NULL,
-                insurance_provider VARCHAR(100) NOT NULL,
-                insurance_id VARCHAR(100) NOT NULL,
-                plan_type VARCHAR(10) NOT NULL CHECK (plan_type IN ('PPO', 'HMO', 'DHMO')),
-                annual_maximum_cents INT NOT NULL DEFAULT 150000,
-                annual_used_cents INT NOT NULL DEFAULT 0,
-                created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-            );
-            CREATE TABLE IF NOT EXISTS claims (
-                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                idempotency_key VARCHAR(255) UNIQUE NOT NULL,
-                patient_id UUID NOT NULL REFERENCES patients(id),
-                cdt_code VARCHAR(10) NOT NULL,
-                cdt_description VARCHAR(200),
-                procedure_date DATE NOT NULL,
-                tooth_number INT,
-                charged_amount_cents INT NOT NULL,
-                has_xray BOOLEAN NOT NULL DEFAULT false,
-                has_narrative BOOLEAN NOT NULL DEFAULT false,
-                has_perio_chart BOOLEAN NOT NULL DEFAULT false,
-                status VARCHAR(30) NOT NULL DEFAULT 'created'
-                    CHECK (status IN ('created','queued','scoring','scored','submitted','accepted','denied','error')),
-                denial_risk_score FLOAT,
-                denial_risk_factors JSONB,
-                scored_at TIMESTAMPTZ,
-                created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-                updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-            );
-            CREATE INDEX IF NOT EXISTS idx_claims_status ON claims(status);
-            CREATE INDEX IF NOT EXISTS idx_claims_patient_id ON claims(patient_id);
-            CREATE INDEX IF NOT EXISTS idx_claims_idempotency_key ON claims(idempotency_key);
-        """)
+    # Schema managed by Alembic migrations (see migrations/versions/).
+    # Tables are created by 'alembic upgrade head' which runs before this service starts.
 
     # Create consumer group (ignore if already exists)
     try:
@@ -139,34 +103,44 @@ async def lifespan(app: FastAPI):
 
 
 async def _recovery_loop(app: FastAPI):
-    """Recover claims stuck in 'created' status due to failed XADD."""
+    """Recover claims stuck in 'created' status due to failed XADD.
+
+    Uses FOR UPDATE SKIP LOCKED to prevent duplicate recovery when
+    multiple claims-service instances are running concurrently.
+    """
     while True:
         try:
-            rows = await app.state.pool.fetch(
-                "SELECT * FROM claims WHERE status = 'created' AND created_at < NOW() - INTERVAL '2 minutes' AND updated_at < NOW() - INTERVAL '2 minutes'"
-            )
-            for row in rows:
-                claim_id = str(row["id"])
-                try:
-                    await app.state.redis.xadd(
-                        STREAM_NAME,
-                        {
-                            "claim_id": claim_id,
-                            "patient_id": str(row["patient_id"]),
-                            "cdt_code": row["cdt_code"],
-                            "charged_amount_cents": str(row["charged_amount_cents"]),
-                            "has_xray": str(row["has_xray"]),
-                            "has_narrative": str(row["has_narrative"]),
-                            "has_perio_chart": str(row["has_perio_chart"]),
-                        },
+            async with app.state.pool.acquire() as conn:
+                async with conn.transaction():
+                    rows = await conn.fetch(
+                        """SELECT * FROM claims
+                           WHERE status = 'created'
+                             AND created_at < NOW() - INTERVAL '2 minutes'
+                             AND updated_at < NOW() - INTERVAL '2 minutes'
+                           FOR UPDATE SKIP LOCKED"""
                     )
-                    await app.state.pool.execute(
-                        "UPDATE claims SET status = 'queued', updated_at = now() WHERE id = $1",
-                        row["id"],
-                    )
-                    logger.info(f"Recovered stuck claim {claim_id} — republished to stream")
-                except Exception as e:
-                    logger.error(f"Failed to recover claim {claim_id}: {e}")
+                    for row in rows:
+                        claim_id = str(row["id"])
+                        try:
+                            await app.state.redis.xadd(
+                                STREAM_NAME,
+                                {
+                                    "claim_id": claim_id,
+                                    "patient_id": str(row["patient_id"]),
+                                    "cdt_code": row["cdt_code"],
+                                    "charged_amount_cents": str(row["charged_amount_cents"]),
+                                    "has_xray": str(row["has_xray"]),
+                                    "has_narrative": str(row["has_narrative"]),
+                                    "has_perio_chart": str(row["has_perio_chart"]),
+                                },
+                            )
+                            await conn.execute(
+                                "UPDATE claims SET status = 'queued', updated_at = now() WHERE id = $1",
+                                row["id"],
+                            )
+                            logger.info(f"Recovered stuck claim {claim_id} — republished to stream")
+                        except Exception as e:
+                            logger.error(f"Failed to recover claim {claim_id}: {e}")
         except asyncio.CancelledError:
             raise
         except Exception as e:

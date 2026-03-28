@@ -9,5 +9,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY shared/ /app/shared/
 COPY patient_service/main.py /app/main.py
+COPY alembic.ini /app/alembic.ini
+COPY migrations/ /app/migrations/
+COPY scripts/migrate.py /app/scripts/migrate.py
 
-CMD uvicorn main:app --host 0.0.0.0 --port ${PORT:-8001}
+CMD alembic -c /app/alembic.ini upgrade head && uvicorn main:app --host 0.0.0.0 --port ${PORT:-8001}

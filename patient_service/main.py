@@ -125,34 +125,11 @@ def _simulate_eligibility(
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     app.state.pool = await asyncpg.create_pool(DATABASE_URL, min_size=2, max_size=10)
-    app.state.redis = redis.from_url(REDIS_URL, decode_responses=True, socket_timeout=5, socket_connect_timeout=5)
+    app.state.redis = redis.from_url(REDIS_URL, decode_responses=True, socket_timeout=0.2, socket_connect_timeout=0.2)
 
-    # Ensure tables exist (for Render managed PG which doesn't run init_db.sql)
+    # Schema managed by Alembic migrations (see migrations/versions/).
+    # Seed demo data if patients table is empty.
     async with app.state.pool.acquire() as conn:
-        await conn.execute("""
-            CREATE TABLE IF NOT EXISTS patients (
-                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                name VARCHAR(200) NOT NULL,
-                date_of_birth DATE NOT NULL,
-                insurance_provider VARCHAR(100) NOT NULL,
-                insurance_id VARCHAR(100) NOT NULL,
-                plan_type VARCHAR(10) NOT NULL CHECK (plan_type IN ('PPO', 'HMO', 'DHMO')),
-                annual_maximum_cents INT NOT NULL DEFAULT 150000,
-                annual_used_cents INT NOT NULL DEFAULT 0,
-                created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-            );
-            CREATE TABLE IF NOT EXISTS eligibility_checks (
-                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                patient_id UUID NOT NULL REFERENCES patients(id),
-                insurance_provider VARCHAR(100) NOT NULL,
-                cdt_code VARCHAR(10) NOT NULL,
-                coverage_percent INT,
-                eligible BOOLEAN NOT NULL,
-                reason TEXT,
-                cache_hit BOOLEAN NOT NULL DEFAULT false,
-                checked_at TIMESTAMPTZ NOT NULL DEFAULT now()
-            );
-        """)
         count = await conn.fetchval("SELECT COUNT(*) FROM patients")
         if count == 0:
             await conn.execute("""

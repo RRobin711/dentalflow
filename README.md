@@ -126,9 +126,9 @@ This is a working demo, not production software. Here's what I'd change for a re
 
 **Authentication & Authorization** -- The gateway has a placeholder auth middleware that accepts demo traffic. Production would use JWT tokens issued by an identity provider (Auth0, Cognito), validated at the gateway, with per-service role scopes (front desk can submit claims, only managers can override denial recommendations). HIPAA compliance would require audit logging of every access.
 
-**Database per Service** -- All services currently share one PostgreSQL instance. This couples them at the data layer, which defeats independent deployability. Production would give each service its own database (or at minimum its own schema), with cross-service communication happening through APIs or events, not shared tables. The patient service would own the `patients` table exclusively, and the claims service would maintain its own denormalized patient reference.
+**Database per Service** -- All services share one PostgreSQL instance but the claims service has no foreign key constraints to the patients table — it validates patient IDs via API calls, not database-level references. This is a step toward full service isolation. Production would give each service its own database (or schema), with cross-service communication through APIs or events.
 
-**Schema Migrations** -- Tables are created via inline `CREATE TABLE IF NOT EXISTS` in service startup. Production would use Alembic (or a similar migration tool) with versioned migration files, so schema changes are trackable, reversible, and coordinated across deployments.
+**Schema Migrations** -- Schema is managed by Alembic with versioned migration files. Services run `alembic upgrade head` on startup; PostgreSQL's locking on the `alembic_version` table prevents race conditions when multiple instances start simultaneously. Migration history is tracked in `migrations/versions/`.
 
 **Rate Limiter** -- Uses a sliding window log (sorted sets) for accurate rate limiting without the boundary problem of fixed window counters. For multi-gateway deployments, I'd add configurable per-route limits and token bucket algorithms for burst handling.
 

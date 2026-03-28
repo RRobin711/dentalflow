@@ -1,4 +1,4 @@
-.PHONY: up down build demo test test-unit logs health clean train help
+.PHONY: up down build demo test test-unit logs health clean train migrate help
 
 up:             ## Start all services
 	docker compose up -d
@@ -26,6 +26,9 @@ health:         ## Check system health
 
 clean:          ## Stop services and delete all data
 	docker compose down -v
+
+migrate:        ## Run database migrations
+	docker compose exec claims-service alembic -c /app/alembic.ini upgrade head
 
 train:          ## Train the ML denial prediction model
 	python3 ml/train_model.py

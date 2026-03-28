@@ -57,7 +57,7 @@ services:
       DATABASE_URL: postgresql://dentalflow:dentalflow@postgres:5432/dentalflow
       REDIS_URL: redis://redis:6379
     depends_on:
-      postgres:
+      patient-service:
         condition: service_healthy
       redis:
         condition: service_healthy
