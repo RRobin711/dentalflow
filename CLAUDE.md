@@ -2,7 +2,7 @@
 
 ## Starting Point
 
-A senior engineer reviewed my background and gave me handwritten feedback on what I needed to demonstrate: microservices, API gateways, Redis caching, message queues, multistep data persistence, idempotency, and real-time server updates. Separately, Dr. Nipa — a clinical director exploring a dental RCM startup — needed a working prototype of a claims processing system.
+A senior engineer reviewed my background and gave me handwritten feedback on what I needed to demonstrate: microservices, API gateways, Redis caching, message queues, multistep data persistence, idempotency, and real-time server updates. Separately, this exists as my pitch to a clinical director exploring a dental RCM startup.
 
 I decided to build one project that addressed both: a distributed dental claims pipeline that hits every concept from the senior's notes while serving as a tangible prototype for the startup.
 
